@@ -1,0 +1,1849 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PEMMultiLTGPlot</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <style>
+        /* Globale Variablen definieren */
+        :root {
+            --primary-color: #536478;
+            --hover-primary-color: #96D0FF;
+            --secondary-color: #243448;
+        }
+
+        /* Allgemeine Styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            display: flex;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block; /* Verhindert Inline-Darstellung */
+            width: 100% !important; /* Überschreibt inline gesetzte Breite */
+            height: 100% !important; /* Überschreibt inline gesetzte Höhe */
+            max-height: 100%; /* Keine Überschreitung der Containerhöhe */
+            max-width: 100%; /* Keine Überschreitung der Containerbreite */
+        }
+
+        /* Hauptcontainer für #content und #controls */
+        #page-container {
+            display: flex; /* Flexbox-Layout */
+            flex-direction: row; /* Standard: Nebeneinander */
+            justify-content: space-between; /* Platz zwischen Content und Controls */
+            align-items: flex-start; /* Elemente oben ausrichten */
+            width: 100%; /* Volle Breite des Containers */
+            height: 100%; /* Volle Höhe des Containers */
+        }
+
+        #content {
+            display: flex;
+            justify-content: space-between; /* Panels nebeneinander ausrichten */
+            flex-direction: column; /* Elemente werden vertikal angeordnet */
+            width: 100%; /* Füllt die gesamte Breite des Fensters */
+            height: 100%; /* Deckt die gesamte Höhe des Fensters ab */
+            padding: 5px 20px 20px 20px; /* Abstände */
+            background-color: #f4f4f4;
+            overflow-x: auto; /* Horizontales Scrollen verhindern */
+            overflow-y: hidden; /* Vertikales Scrollen verhindern */
+            position: relative;
+            flex-grow: 1; /* Nimmt den verfügbaren Platz ein */
+            min-width: 60%;
+            box-sizing: border-box; /* Innenabstände einrechnen */
+        }
+
+        #header {
+            display: flex;
+            flex-direction: column; /* Titel in eine Zeile, Buttons und Logo in die nächste */
+        }
+
+        #left-panel {
+            display: flex;
+            flex-direction: column; /* Titel und Buttons/Logo untereinander */
+            align-items: flex-start;
+        }
+
+        #right-panel {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end; /* Achsensteuerung rechtsbündig */
+        }
+
+        #header h1 {
+            padding-top: 10px; /* Fügt Platz nur oberhalb des Titels hinzu */
+        }
+
+        #header-buttons {
+            display: flex;
+            flex-wrap: nowrap; /* Kein Zeilenumbruch */
+            gap: 10px; /* Abstand zwischen den Elementen */
+            justify-content: flex-start; /* Elemente links ausrichten */
+            align-items: center; /* Vertikale Zentrierung */
+            overflow: hidden; /* Optional: Überlauf verhindern */
+        }
+
+        #header-container {
+            display: flex;
+            flex-wrap: nowrap; /* Elemente bleiben in einer Zeile */
+            justify-content: space-between; /* Elemente werden gleichmäßig verteilt */
+            align-items: center;
+            width: 100%; /* Stellt sicher, dass der Header die volle Breite einnimmt */
+            margin-bottom: 10px; /* Abstand zum Diagramm */
+            gap: 10px; /* Platz zwischen den Elementen */
+        }
+
+        #header-container h3 {
+            margin-right: auto; /* Hält den Titel links */
+        }
+
+        h1 {
+            margin-bottom: 10px;
+            font-size: 2.7em;
+        }
+
+        #exportButton {
+            width: 160px; /* Breite */
+            height: 50px; /* Höhe */
+            margin-top: -5px; /* Abstand nach oben */
+            padding: 10px 15px;
+            font-size: 14px;
+            color: white;
+            background-color: var(--primary-color);
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            text-align: center;
+            transition: background-color 0.3s;
+        }
+
+        #exportButton:hover {
+            background-color: var(--hover-primary-color);
+        }
+
+        #logo {
+            max-height: 80px;
+            max-width: 200px;
+            object-fit: contain;
+            margin-left: 10px; /* Abstand vom Export-Button */
+        }
+
+        #axisControls {
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #ddd; /* Rahmen für die optische Absetzung */
+            border-radius: 5px;
+            padding: 10px;
+            background-color: #f9f9f9; /* Hintergrundfarbe */
+            flex-shrink: 0; /* Verhindert Schrumpfen bei Platzmangel */
+            overflow: hidden; /* Verhindert Überlappungen bei zu viel Inhalt */
+            gap: 10px; /* Abstand zwischen X- und Y-Achsensteuerung */
+        }
+
+        .axis-row {
+            display: grid;
+            grid-template-columns: 70px 1fr 20px 1fr auto 45px; /* Festlegen der Spalten: Label, Input, Dash, Input, Button, Button */
+            gap: 10px; /* Einheitlicher Abstand zwischen den Spalten */
+            align-items: center; /* Vertikale Zentrierung */
+        }
+
+        .axis-row label {
+            text-align: right; /* Rechtsbündig für konsistente Ausrichtung */
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .axis-row input {
+            padding: 5px;
+            width: 80px;
+            font-size: 12px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            box-sizing: border-box; /* Padding und Border in die Breite einbeziehen */
+        }
+
+        .axis-row .dash {
+            text-align: center;
+            font-size: 14px;
+            font-weight: normal;
+            color: #333;
+        }
+
+        .axis-row button {
+            padding: 5px 10px;
+            width: 40px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            text-align: center;
+        }
+
+        .axis-row button:hover {
+            background-color: var(--hover-primary-color);
+        }
+
+        #chart-container {
+            flex: 1; /* Nimmt den restlichen Platz ein */
+            justify-content: center;
+            align-items: center;
+            min-height: 0; /* Verhindert Einschränkungen durch Flexbox */
+            /*height: calc(100dvh - 100px); /* Höhe des Diagramms anpassen */
+            height: auto;
+            width: max(100%, 780px); /* Mindestens 780px oder die volle Breite */
+            position: relative; /* Sicherstellen, dass das Diagramm innerhalb bleibt */
+        }
+
+        #controls {
+            background: #f9f9f9;
+            border-left: 2px solid #ddd;
+            padding: 20px 10px;
+            flex-shrink: 0; /* Verhindert, dass das Control-Panel schrumpft */
+            flex-direction: column; /* Elemente vertikal anordnen */
+            min-width: 400px; /* Mindestbreite */
+            max-width: 100%; /* Keine feste Breite */
+            height: 100%; /* Füllt die volle Höhe des Containers */
+            box-sizing: border-box; /* Innenabstände und Rahmen in die Breite einrechnen */
+            overflow: hidden; /* Kein Scrollen im controls-Container */
+        }
+
+        #csvFileInput {
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            width: 0px;
+            height: 0px;
+        }
+
+        .file-upload-button {
+            display: inline-block;
+            width: 180px;
+            padding: 26px 20px;
+            font-size: 16px;
+            color: white;
+            background-color: var(--primary-color);
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            text-align: center;
+            transition: background-color 0.3s;
+        }
+
+        .file-upload-button:hover {
+            background-color: var(--hover-primary-color);
+        }
+
+        /* Datei-Upload und Dropdown nebeneinander */
+        .file-upload-dropdown-grid {
+            display: grid;
+            grid-template-columns: auto 1fr; /* Datei-Upload links, Dropdowns rechts */
+            gap: 10px; /* Platz zwischen Datei-Upload und Dropdowns */
+            align-items: center; /* Inhalte vertikal zentrieren */
+            margin-bottom: 10px;
+        }
+
+        .dropdown-column {
+            display: flex;
+            flex-direction: column; /* Dropdown-Reihen vertikal anordnen */
+            gap: 10px; /* Abstand zwischen den Dropdown-Zeilen */
+        }
+
+        .dropdown-row {
+            display: flex; /* Label und Dropdown nebeneinander */
+            gap: 10px; /* Abstand zwischen Label und Dropdown */
+            align-items: center; /* Vertikal zentriert */
+        }
+
+        .dropdown-row label {
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .dropdown-row select {
+            width: 180px;
+            padding: 5px;
+            font-size: 14px;
+        }
+
+        #columnSelect {
+            display: inline-block;
+            margin-top: 0; /* Kein zusätzlicher Abstand */
+            width: 180px; /* Standardbreite setzen */
+            font-size: 14px;
+            padding: 5px; /* Innenabstand */
+        }
+
+        #controls label {
+            margin-bottom: 4px; /* Weniger Abstand zwischen Label und Dropdown */
+        }
+
+        #table-container {
+            overflow-y: auto;
+            max-height: calc(100vh - 270px);
+            margin-bottom: -10px; /* Abstand verkleinern */
+        }
+
+        #controls table {
+            border-collapse: collapse;
+            width: 100%;
+            table-layout: auto;
+        }
+
+        #controls th, #controls td {
+            border: 1px solid #ddd;
+            padding: 6px;
+            font-size: 12px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        #controls th:nth-child(2), #controls th:nth-child(3),
+        #controls td:nth-child(2), #controls td:nth-child(3) {
+            text-align: center;
+            width: 80px;
+        }
+
+        input[type="checkbox"] {
+            width: 20px; /* Breite */
+            height: 20px; /* Höhe */
+            accent-color: #d8d8d8; /* Anpassung der Farbe */
+            cursor: pointer; /* Zeiger anzeigen */
+        }
+
+        input[type="checkbox"]:checked {
+            background-color: #007BFF; /* Hintergrundfarbe, wenn ausgewählt */
+            color: white; /* Farbe des Häkchens */
+        }
+
+        input[type="checkbox"]:disabled {
+            background-color: #e0e0e0; /* Hintergrundfarbe für deaktivierte Checkbox */
+            border-color: #ddd; /* Rahmenfarbe für deaktiviert */
+            cursor: not-allowed;
+        }
+
+        #controls td button {
+            width: 100px; /* Breite der Löschen-Buttons */
+            height: 25px;
+            font-size: 14px;
+            cursor: pointer;
+            background-color: #f44336;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+
+        #controls td button:hover {
+            background-color: #d32f2f;
+        }
+
+        .button-container {
+            display: flex; /* Stellt sicher, dass die Buttons nebeneinander liegen */
+            justify-content: space-between; /* Verhindert zusätzlichen Abstand am Rand */
+            /* margin-top: 15px; */
+            gap: 10px; /* Abstand zwischen den Buttons */
+            margin: 20px 0 0 0; /* 20px Abstand nach oben, kein Abstand rechts, unten und links */
+        }
+
+        .button-container button {
+            flex: 1;
+            padding: 8px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        #progress-status,
+        #progress-status-non-query {
+            font-size: 12px; /* Einheitliche Schriftgröße */
+            font-weight: normal; /* Konsistente Schriftstärke */
+            color: #555; /* Einheitliche Textfarbe */
+            margin-top: 10px;
+            margin-bottom: 5px;
+        }
+
+        .progress-section {
+            display: flex;
+            flex-direction: column; /* Elemente vertikal anordnen */
+            gap: 10px; /* Abstand zwischen den Elementen */
+            padding: 10px; /* Innenabstand für den Rahmen */
+            border: 1px solid #ddd; /* Rahmenfarbe */
+            border-radius: 5px; /* Abgerundete Ecken */
+            background-color: #f9f9f9; /* Optional: Hintergrundfarbe */
+        }
+
+        /* Fortschrittsbalken und Status */
+        #progressBarContainer,
+        #progressBarContainer-non-query,
+        #progress-status,
+        #progress-status-non-query,
+        .non-query-layout .button-container {
+            display: none; /* Standardmäßig ausgeblendet */
+        }
+
+        #progressBar {
+            transition: width 0.2s ease;
+        }
+
+        /* Overlay für den Copyright-Claim */
+        #overlay {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            text-align: center;
+            padding: 10px 20px;
+            font-size: 14px;
+            z-index: 1000; /* Sicherstellen, dass es über allem liegt */
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* Button im Overlay */
+        #overlay button {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+
+        #overlay button:hover {
+            color: var(--hover-primary-color);
+        }
+
+        @media (min-width: 1101px) {
+            /* Nicht-Query-spezifisches Layout */
+            .non-query-layout {
+                display: flex; /* Layout aktivieren */
+                flex-direction: column; /* Vertikal anordnen */
+                gap: 10px; /* Abstand zwischen den Elementen */
+            }
+
+            #progressBarContainer-non-query,
+            #progress-status-non-query,
+            .non-query-layout .button-container {
+                display: flex; /* Ladebalken, Status und Buttons anzeigen */
+            }
+
+            /* Fortschrittsbalken */
+            #progressBarContainer-non-query {
+                margin-top: -5px;
+            }
+
+            /* Status */
+            #progress-status-non-query {
+                margin-top: 0px;
+            }
+
+            /* Buttons unterhalb der Tabelle */
+            .non-query-layout .button-container {
+                justify-content: center;
+            }
+
+            /* Ladebalken, Status und Buttons vertikal anordnen */
+            .progress-section {
+                display: none; /* Im Nicht-Query-Modus ausblenden */
+            }
+
+            /* Dropdowns und Hochladen-Button bleiben sichtbar */
+            .file-upload-dropdown-grid {
+                display: grid; /* Grid bleibt aktiv */
+                grid-template-columns: auto 1fr; /* Zwei Spalten: Hochladen und Dropdowns */
+                gap: 20px; /* Abstand zwischen Spalten */
+            }
+        }
+
+        @media (max-width: 1100px) {
+            #page-container {
+                flex-direction: column; /* Inhalt vertikal anordnen */
+                justify-content: flex-start; /* Elemente am oberen Rand ausrichten */
+                height: 100vh; /* Volle Höhe des Viewports */
+                overflow: hidden; /* Verhindert überflüssiges Scrollen */
+            }
+
+            #content {
+                height: 700px; /* Konstante Höhe im Query-Modus */
+                width: 100%; /* Volle Breite */
+                flex: 0 0 auto; /* Verhindert flexibles Wachstum oder Schrumpfen */
+            }
+
+            #chart-container {
+                height: 100%; /* Füllt die Höhe des #content */
+            }
+
+            #controls {
+                width: 100%; /* Volle Breite */
+                flex-grow: 1; /* Nimmt verbleibenden Platz ein */
+                height: calc(100vh - 700px); /* Höhe basierend auf restlicher Höhe */
+                border-left: none; /* Entfernt Trennlinie links */
+                border-top: 2px solid #ddd; /* Trennlinie oben */
+                overflow-y: auto; /* Vertikaler Scrollbalken bei Überlauf */
+                overflow-x: auto; /* Horizontaler Scrollbalken bei Überlauf */
+                padding: 20px; /* Innenabstände */
+                box-sizing: border-box; /* Innenabstände einrechnen */
+            }
+
+            #table-container {
+                width: max(100%, 905px); /* Breite des Containers */
+                padding: 0; /* Kein Innenabstand */
+                margin-bottom: 10px; /* Abstand nach unten */
+                overflow-x: auto; /* Nur horizontaler Scrollbalken, falls notwendig */
+                overflow-y: hidden; /* Kein vertikaler Scrollbalken */
+                box-sizing: border-box; /* Rahmen und Padding einbeziehen */
+            }
+
+            #controls table {
+                table-layout: auto; /* Automatische Spaltenbreiten basierend auf den Inhalten */
+                width: 100%; /* Tabelle füllt die gesamte Breite des Containers */
+                min-width: 100%; /* Verhindert, dass die Tabelle schmaler wird als der Container */
+                border-collapse: collapse; /* Ränder der Tabelle zusammenziehen */
+            }
+
+            #controls th, #controls td {
+                border: 1px solid #ddd;
+                padding: 6px; /* Innenabstand */
+                font-size: 12px; /* Schriftgröße */
+                white-space: nowrap; /* Kein Zeilenumbruch */
+                overflow: hidden; /* Verhindert Überlauf */
+                text-overflow: ellipsis; /* Ellipsen für abgeschnittenen Text */
+            }
+
+            #controls td button {
+                width: 100px; /* Feste Breite des Buttons */
+                max-width: 100%; /* Verhindert, dass der Button die Zelle überlappt */
+                height: 25px; /* Standardhöhe für Buttons */
+                font-size: 14px; /* Schriftgröße */
+                padding: 4px; /* Innenabstand */
+                box-sizing: border-box; /* Padding und Border in der Größe berücksichtigen */
+                background-color: #f44336; /* Hintergrundfarbe */
+                color: white; /* Schriftfarbe */
+                border: none; /* Kein Rahmen */
+                border-radius: 5px; /* Abgerundete Ecken */
+                cursor: pointer; /* Zeiger bei Hover */
+                text-align: center; /* Zentrierter Text */
+                overflow: hidden; /* Verhindert Überlauf */
+            }
+
+            #controls td button:hover {
+                background-color: #d32f2f; /* Farbe beim Hover */
+            }
+
+            .file-upload-dropdown-grid {
+                display: grid;
+                grid-template-columns: auto 1fr auto; /* Drei Spalten */
+                grid-template-rows: auto auto auto; /* Drei Zeilen */
+                gap: 10px; /* Abstand zwischen den Elementen */
+                align-items: center;
+            }
+
+            /* Linke Spalte: Hochladen */
+            .file-upload {
+                grid-column: 1; /* Erste Spalte */
+                grid-row: 1 / span 3; /* Über alle drei Zeilen */
+            }
+
+            /* Mittlere Spalte: Dropdowns */
+            .dropdown-column {
+                grid-column: 2; /* Zweite Spalte */
+                grid-row: 1 / span 3; /* Über alle drei Zeilen */
+                display: flex;
+                flex-direction: column; /* Dropdowns vertikal anordnen */
+                gap: 10px; /* Abstand zwischen Dropdowns */
+            }
+
+            /* Rechte Spalte als Container */
+            .progress-section {
+                grid-column: 3; /* Rechte Spalte */
+                grid-row: 1 / span 3; /* Über alle drei Zeilen */
+                display: grid; /* Grid innerhalb der Spalte */
+                grid-template-rows: auto auto auto; /* Drei Zeilen */
+                gap: 0px; /* Geringerer Abstand zwischen Elementen */
+                align-items: flex-start; /* Inhalte linksbündig ausrichten */
+                padding: 10px; /* Innenabstand für den Rahmen */
+                border: 1px solid #ddd; /* Rahmen */
+                border-radius: 5px; /* Abgerundete Ecken */
+                background-color: #f9f9f9; /* Hintergrundfarbe */
+            }
+
+            /* Ladebalken in der rechten Spalte */
+            .progress-section #progressBarContainer {
+                grid-column: 3; /* Rechte Spalte */
+                grid-row: 1; /* Obere Zeile */
+                background: #eee; /* Standard-Hintergrundfarbe */
+                width: 100%; /* Volle Breite */
+                margin-bottom: 3px; /* Reduzierter Abstand nach unten */
+            }
+
+            /* Statusmeldungen in der rechten Spalte */
+            .progress-section #progress-status {
+                grid-column: 3; /* Rechte Spalte */
+                grid-row: 2; /* Zweite Zeile */
+                text-align: left; /* Links ausgerichtet */
+                margin-top: 0px; /* Minimaler Abstand nach oben */
+                margin-bottom: -10px; /* Minimaler Abstand nach unten */
+            }
+
+            /* Buttons in der rechten Spalte */
+            .progress-section .button-container {
+                grid-column: 3; /* Rechte Spalte */
+                grid-row: 3; /* Dritte Zeile */
+                display: flex; /* Flexibles Layout für Buttons */
+                gap: 10px; /* Geringerer Abstand zwischen Buttons */
+                justify-content: flex-start; /* Links ausgerichtete Buttons */
+                width: 100%; /* Buttons nehmen verfügbare Breite */
+                padding: 0px; /* Kleinere Innenabstände */
+            }
+
+            .progress-section .button-container button {
+                flex: 1; /* Gleichmäßige Verteilung */
+                width: 150px;
+                padding: 8px; /* Größere Innenabstände für bessere Lesbarkeit */
+                font-size: 12px; /* Größere Schrift */
+                margin-left: 0px; /* Kein zusätzlicher Abstand von links */
+                cursor: pointer;
+            }
+
+            /* Verberge Nicht-Query-Layout */
+            .non-query-layout {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="page-container">
+        <div id="content">
+            <!-- Header mit Titel, Achsensteuerung, Export-Button und Logo -->
+            <div id="header-container">
+                <div id="left-panel">
+                    <div id="header">
+                        <!-- Haupttitel -->
+                        <h1>PEMMultiLTGPlot</h1>
+                        <div id="header-buttons">
+                            <!-- Export-Button -->
+                            <button id="exportButton" onclick="exportChartAsImage()">Exportieren</button>
+
+                            <!-- Logo -->
+                            <a href="https://pemtec.de" target="_blank">
+                                <img id="logo" src="PemTec-Flat-Claim-black.png" alt="Logo">
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div id="right-panel">
+                    <!-- Achsensteuerung -->
+                    <div id="axisControls">
+                        <!-- X-Achse -->
+                        <div class="axis-row">
+                            <label for="xMin">X-Achse:</label>
+                            <input type="number" id="xMin" placeholder="Min">
+                            <span class="dash">-</span>
+                            <input type="number" id="xMax" placeholder="Max">
+                            <button onclick="updateXAxisRange()">✓</button>
+                            <button onclick="resetXAxisRange()">⟲</button>
+                        </div>
+                        <!-- Y1-Achse -->
+                        <div class="axis-row">
+                            <label for="y1Min">Y1-Achse:</label>
+                            <input type="number" id="y1Min" placeholder="Min">
+                            <span class="dash">-</span>
+                            <input type="number" id="y1Max" placeholder="Max">
+                            <button onclick="updateYAxisRange('y1')">✓</button>
+                            <button onclick="resetYAxisRange('y1')">⟲</button>
+                        </div>
+                        <!-- Y2-Achse -->
+                        <div class="axis-row">
+                            <label for="y2Min">Y2-Achse:</label>
+                            <input type="number" id="y2Min" placeholder="Min">
+                            <span class="dash">-</span>
+                            <input type="number" id="y2Max" placeholder="Max">
+                            <button onclick="updateYAxisRange('y2')">✓</button>
+                            <button onclick="resetYAxisRange('y2')">⟲</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Chart -->
+            <div id="chart-container">
+                <canvas id="myChart"></canvas>
+            </div>
+        </div>
+
+        <div id="controls">
+            <h1>LTG-Daten</h1>
+
+            <!-- Grid für Query-Modus -->
+            <div class="file-upload-dropdown-grid">
+                <!-- Linke Spalte: Hochladen -->
+                <div class="file-upload">
+                    <label for="csvFileInput" class="file-upload-button">Dateien auswählen</label>
+                    <input type="file" id="csvFileInput" accept=".csv" multiple>
+                </div>
+
+                <!-- Mittlere Spalte: Dropdowns -->
+                <div class="dropdown-column">
+                    <div class="dropdown-row">
+                        <label for="columnSelectY1">Y1:</label>
+                        <select id="columnSelectY1">
+                            <option value="none">Keine Daten vorhanden</option>
+                        </select>
+                    </div>
+                    <div class="dropdown-row">
+                        <label for="columnSelectY2">Y2:</label>
+                        <select id="columnSelectY2">
+                            <option value="none">Keine Daten vorhanden</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Rechte Spalte für Query -->
+                <div class="progress-section">
+                    <!-- Ladebalken -->
+                    <div id="progressBarContainer" style="background: #eee;">
+                        <div id="progressBar" style="width: 0%; height: 20px; background: var(--hover-primary-color);"></div>
+                    </div>
+
+                    <!-- Status -->
+                    <div id="progress-status">Keine Dateien geladen</div>
+
+                    <!-- Buttons -->
+                    <div class="button-container">
+                        <button onclick="showAllDatasets()">Alle sichtbar</button>
+                        <button onclick="hideAllDatasets()">Alle ausblenden</button>
+                        <button onclick="deleteAllDatasets()">Alle löschen</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tabelle -->
+            <div id="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Dateiname</th>
+                            <th>Sichtbar</th>
+                            <th>Aktion</th>
+                        </tr>
+                    </thead>
+                    <tbody id="fileTableBody"></tbody>
+                </table>
+            </div>
+
+            <!-- Nicht-Query-Modus: Status, Ladebalken und Buttons unter der Tabelle -->
+            <div class="non-query-layout">
+                <!-- Buttons -->
+                <div class="button-container">
+                    <button onclick="showAllDatasets()">Alle sichtbar</button>
+                    <button onclick="hideAllDatasets()">Alle ausblenden</button>
+                    <button onclick="deleteAllDatasets()">Alle löschen</button>
+                </div>
+
+                <!-- Status -->
+                <div id="progress-status-non-query">Keine Dateien geladen</div>
+
+                <!-- Ladebalken -->
+                <div id="progressBarContainer-non-query" style="display: none; background: #eee;">
+                    <div id="progressBar-non-query" style="width: 0%; height: 20px; background: var(--hover-primary-color);"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="overlay">
+        <div>
+            Diese Anwendung verwendet <a href="https://www.chartjs.org/" target="_blank" style="color: var(--hover-primary-color);">Chart.js</a> 
+            und <a href="https://www.papaparse.com/" target="_blank" style="color: var(--hover-primary-color);">Papa Parse</a>, lizenziert unter der MIT-Lizenz.
+        </div>
+        <button onclick="hideOverlay()">×</button>
+    </div>
+
+    <script>
+        const ctx = document.getElementById('myChart').getContext('2d');
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [], // X-Achsen-Daten
+                datasets: [], // Keine initialen Datensätze
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            // Nur sichtbare Datensätze in der Legende anzeigen
+                            filter: (legendItem, data) => {
+                                const dataset = data.datasets[legendItem.datasetIndex];
+                                return !dataset.hidden; // Nur anzeigen, wenn hidden: false
+                            },
+                        },
+                    },
+                },
+                scales: {
+                    x: {
+                        type: 'linear', // Sicherstellen, dass X-Achse numerische Werte unterstützt
+                        title: {
+                            display: true,
+                            text: 'Zeit (s)', // Beschriftung der Zeitachse
+                        },
+                        grid: {
+                            drawBorder: false,
+                        },
+                        ticks: {
+                            callback: function(value, index, ticks) {
+                                // Konvertiere die Ticks zurück zu Sekunden, falls notwendig
+                                return value.toFixed(0) + ' s'; // Zeit in Sekunden anzeigen
+                            },
+                        },
+                    },
+                    y1: {
+                        type: 'linear',
+                        position: 'left',
+                        title: {
+                            display: true,
+                            text: 'Y1',
+                        },
+                        grid: {
+                            drawBorder: false, // Rahmen für Y1 deaktivieren
+                        },
+                    },
+                    y2: {
+                        type: 'linear',
+                        position: 'right',
+                        title: {
+                            display: false,
+                            text: 'Y2',
+                        },
+                        grid: {
+                            drawOnChartArea: false, // Gitterlinien für Y2 deaktivieren
+                        },
+                    },
+                },
+                animation: false, // Animationen deaktivieren
+            },
+        });
+
+        const MAX_PARALLEL_UPLOADS = 5; // Maximale gleichzeitige Datei-Verarbeitung
+        const fileInput = document.getElementById('csvFileInput');
+        const fileTableBody = document.getElementById('fileTableBody');
+        const progressStatus = document.getElementById('progress-status');
+        const columnSelectY1 = document.getElementById('columnSelectY1');
+        const columnSelectY2 = document.getElementById('columnSelectY2');
+        const uploadedFilesInfo = new Set(); // Speichert Dateiinformationen
+        const usedColors = new Set();
+
+        let lastHoveredRowIndex = null; // Caching für den aktuellen Zustand
+        let skippedFiles = 0; // Zählt die Anzahl übersprungener Dateien
+        let globalHeaders = [];
+        let globalData = [];
+        
+        // Beim Laden der Seite prüfen
+        window.onload = () => {
+            populateDropdowns([]);
+            resetToInitialState(); // Achsentitel und Beschriftungen initial zurücksetzen
+            checkOverlay();
+        };
+
+        window.addEventListener('resize', () => {
+            chart.resize();
+        });
+
+        // Event-Listener für das Hochladen von Dateien
+        fileInput.addEventListener("change", async (e) => {
+            const files = e.target.files;
+            const totalFiles = files.length;
+            const MAX_PARALLEL_UPLOADS = 5; // Maximale Anzahl paralleler Uploads
+            let processedFiles = 0; // Erfolgreich verarbeitete Dateien
+            let skippedFiles = 0; // Übersprungene Dateien (z. B. Duplikate)
+            let errorFiles = 0; // Dateien, die aufgrund von Fehlern nicht verarbeitet wurden
+
+            if (totalFiles === 0) return;
+
+            // Fortschrittsanzeige initialisieren
+            updateProgressStatus({ processed: processedFiles, skipped: skippedFiles, errors: errorFiles, total: totalFiles, isUploading: true });
+
+            // Funktion zur Verarbeitung einer einzelnen Datei
+            const processFile = async (file) => {
+                const fileIdentifier = `${file.name}-${file.size}`;
+
+                // Prüfe auf Duplikate
+                if (uploadedFilesInfo.has(fileIdentifier)) {
+                    skippedFiles++;
+                    updateProgressStatus({ processed: processedFiles, skipped: skippedFiles, errors: errorFiles, total: totalFiles, isUploading: true });
+                    return; // Überspringen
+                }
+
+                uploadedFilesInfo.add(fileIdentifier);
+
+                try {
+                    const reader = new FileReader();
+                    const fileData = await new Promise((resolve, reject) => {
+                        reader.onload = (event) => resolve(event.target.result);
+                        reader.onerror = reject;
+                        reader.readAsArrayBuffer(file);
+                    });
+
+                    const decodedText = new TextDecoder("iso-8859-1").decode(fileData);
+
+                    // Verarbeite CSV-Daten
+                    const result = Papa.parse(decodedText, {
+                        skipEmptyLines: true,
+                        delimiter: ";",
+                    });
+
+                    const data = preprocessCSVData(result.data);
+                    if (data) {
+                        handleNewDataUpload(file.name, data);
+                        processedFiles++;
+                    } else {
+                        throw new Error("Ungültige Datenstruktur.");
+                    }
+                } catch (error) {
+                    console.warn(`Fehler beim Verarbeiten der Datei ${file.name}:`, error);
+                    errorFiles++;
+                }
+
+                // Fortschrittsanzeige aktualisieren
+                updateProgressStatus({ processed: processedFiles, skipped: skippedFiles, errors: errorFiles, total: totalFiles, isUploading: true });
+            };
+
+            // Verarbeite Dateien parallel
+            const fileQueue = Array.from(files);
+            while (fileQueue.length > 0) {
+                const chunk = fileQueue.splice(0, MAX_PARALLEL_UPLOADS);
+                await Promise.all(chunk.map(processFile));
+            }
+
+            // Fortschrittsanzeige finalisieren
+            //updateProgressStatus({ processed: processedFiles, skipped: skippedFiles, errors: errorFiles, total: totalFiles, isUploading: false });
+        });
+
+        function updateProgressStatus({ processed = 0, skipped = 0, errors = 0, total = 0, isUploading = false } = {}) {
+            const rows = Array.from(fileTableBody.rows); // Alle Zeilen in der Tabelle
+            const totalRows = rows.length;
+
+            // Zähle die sichtbaren Zeilen (nur aktivierte Checkboxen)
+            const visibleRows = rows.filter((row) => {
+                const checkbox = row.querySelector('input[type="checkbox"]');
+                return checkbox && checkbox.checked; // Nur Checkboxen, die aktiv sind
+            }).length;
+
+            const hiddenRows = totalRows - visibleRows; // Nicht sichtbare Zeilen
+
+            let statusText = '';
+
+            if (isUploading && total > 0) {
+                statusText = `${processed} erfolgreich, ${skipped} Duplikate, ${errors} fehlerhaft von ${total} Dateien.`;
+            } else if (totalRows > 0) {
+                if (visibleRows === totalRows) {
+                    statusText = `${totalRows} Datensätze geladen und sichtbar.`;
+                } else if (visibleRows === 0) {
+                    statusText = `${totalRows} Datensätze geladen, aber keine sichtbar.`;
+                } else {
+                    statusText = `${totalRows} Datensätze geladen, ${visibleRows} sichtbar, ${hiddenRows} ausgeblendet.`;
+                }
+            } else {
+                statusText = 'Keine Dateien geladen.';
+            }
+
+            // Statusanzeige aktualisieren
+            const progressStatusElements = document.querySelectorAll('#progress-status, #progress-status-non-query');
+            progressStatusElements.forEach((statusElement) => {
+                statusElement.textContent = statusText;
+                statusElement.style.display = 'block';
+            });
+
+            // Fortschrittsbalken aktualisieren
+            const progressBarContainers = document.querySelectorAll('#progressBarContainer, #progressBarContainer-non-query');
+            const progressBars = document.querySelectorAll('#progressBar, #progressBar-non-query');
+
+            const progressPercent = Math.min(Math.round(((processed + skipped + errors) / total) * 100), 100);
+
+            if (isUploading) {
+                // Fortschrittsbalken sichtbar machen, falls noch nicht angezeigt
+                progressBarContainers.forEach((container) => {
+                    if (container.style.display !== 'block') {
+                        container.style.display = 'block';
+                    }
+                });
+                progressBars.forEach((bar) => (bar.style.width = `${progressPercent}%`));
+            } else {
+                // Fortschrittsbalken auf 100% setzen und nach Abschluss ausblenden
+                progressBars.forEach((bar) => (bar.style.width = '100%'));
+                setTimeout(() => {
+                    progressBarContainers.forEach((container) => {
+                        if (container.style.display !== 'none') {
+                            container.style.display = 'none';
+                        }
+                    });
+                }, 500);
+            }
+        }
+
+        function preprocessCSVData(data) {
+            console.log("Eingehende Daten:", data);
+
+            const firstEmptyRowIndex = data.findIndex(row => row.every(cell => cell.trim() === ""));
+            if (firstEmptyRowIndex === -1) {
+                console.warn("Keine Leerzeile gefunden. Metadaten konnten nicht entfernt werden.");
+                return null;
+            }
+
+            let potentialHeaderIndex = firstEmptyRowIndex + 1;
+            while (potentialHeaderIndex < data.length && data[potentialHeaderIndex].every(cell => cell.trim() === "")) {
+                potentialHeaderIndex++;
+            }
+
+            if (potentialHeaderIndex >= data.length) {
+                console.warn("Keine Headerzeile gefunden.");
+                return null;
+            }
+
+            const headers = data[potentialHeaderIndex].map(header => header.trim());
+            console.log("Extrahierter Header:", headers);
+
+            if (headers.every(header => header === "")) {
+                console.warn("Die Header-Zeile ist leer.");
+                return null;
+            }
+
+            const rows = data.slice(potentialHeaderIndex + 1).map(row =>
+                row.map(cell => {
+                    const cleanedCell = cell.trim().replace(',', '.');
+                    return isNaN(cleanedCell) ? cleanedCell : parseFloat(cleanedCell);
+                })
+            );
+
+            if (rows.length === 0 || rows[0].length !== headers.length) {
+                console.warn("Ungültige Datenstruktur. Datenanzahl passt nicht zu den Headern.");
+                return null;
+            }
+
+            globalHeaders = headers;
+            globalData.push({ headers, rows });
+
+            console.log("Globale Header:", globalHeaders);
+            console.log("Globale Daten:", globalData);
+
+            // Aktualisiere beide Dropdowns mit den neuen Headern
+            populateDropdowns(globalHeaders);
+
+            return { headers, rows };
+        }
+
+        function populateDropdowns(headers) {
+            columnSelectY1.innerHTML = '';
+            columnSelectY2.innerHTML = '';
+
+            if (headers.length === 0) {
+                const placeholderOptionY1 = document.createElement('option');
+                placeholderOptionY1.textContent = 'Keine Daten verfügbar';
+                placeholderOptionY1.disabled = true;
+                placeholderOptionY1.selected = true;
+                columnSelectY1.appendChild(placeholderOptionY1);
+
+                const placeholderOptionY2 = document.createElement('option');
+                placeholderOptionY2.textContent = 'Keine Daten verfügbar';
+                placeholderOptionY2.disabled = true;
+                placeholderOptionY2.selected = true;
+                columnSelectY2.appendChild(placeholderOptionY2);
+            } else {
+                // Befülle Dropdown für Y1
+                headers.slice(1).forEach((header, index) => {
+                    const optionY1 = document.createElement('option');
+                    optionY1.value = index;
+                    optionY1.textContent = header;
+                    columnSelectY1.appendChild(optionY1);
+                });
+
+                // Befülle Dropdown für Y2 mit der zusätzlichen Option "Aus"
+                const noDataOptionY2 = document.createElement('option');
+                noDataOptionY2.value = 'off';
+                noDataOptionY2.textContent = 'Aus';
+                columnSelectY2.appendChild(noDataOptionY2);
+
+                headers.slice(1).forEach((header, index) => {
+                    const optionY2 = document.createElement('option');
+                    optionY2.value = index;
+                    optionY2.textContent = header;
+                    columnSelectY2.appendChild(optionY2);
+                });
+
+                // Standardauswahl
+                columnSelectY1.selectedIndex = 0; // Standardmäßig die erste Datenspalte
+                columnSelectY2.selectedIndex = 0; // Standardmäßig "Aus"
+                
+                // Achsenbeschriftungen und Sichtbarkeit aktualisieren
+                updateAxes();
+            }
+        }
+
+        // Event-Listener für Änderungen in den Dropdowns
+        columnSelectY1.addEventListener('change', () => {
+            updateChartForVisibleRows();
+            updateYAxisScale('y1');
+            updateAxes(); // Achsentitel und Sichtbarkeit aktualisieren
+
+            // Aktualisiere Eingabefelder für Y1
+            prefillAxisInputs();
+        });
+
+        columnSelectY2.addEventListener('change', () => {
+            const y2Value = columnSelectY2.value;
+
+            if (y2Value === 'off') {
+                toggleYAxisY2(false);
+            } else {
+                toggleYAxisY2(true);
+            }
+
+            updateChartForVisibleRows(); // Daten aktualisieren
+            updateYAxisScale('y2'); // Skala aktualisieren
+            updateAxes(); // Achsentitel und Sichtbarkeit aktualisieren
+
+            // Aktualisiere Eingabefelder für Y2
+            prefillAxisInputs();
+        });
+
+        function prefillAxisInputs() {
+            const roundToDecimalPlaces = (value, decimals) => {
+                if (typeof value !== 'number' || isNaN(value)) return '';
+                return value.toFixed(decimals);
+            };
+
+            const getMaxDecimals = (values) => {
+                const decimals = values
+                    .filter((value) => typeof value === 'number' && !isNaN(value))
+                    .map((value) => {
+                        const str = value.toString();
+                        const decimalIndex = str.indexOf('.');
+                        return decimalIndex === -1 ? 0 : str.length - decimalIndex - 1;
+                    });
+                return Math.max(0, ...decimals);
+            };
+
+            // X-Achse
+            const xMinInput = document.getElementById('xMin');
+            const xMaxInput = document.getElementById('xMax');
+            const xValues = chart.data.labels.map((label) => parseFloat(label)).filter((value) => !isNaN(value));
+            const xDecimals = getMaxDecimals(xValues);
+
+            xMinInput.value = roundToDecimalPlaces(chart.options.scales.x.min ?? Math.min(...xValues), xDecimals);
+            xMaxInput.value = roundToDecimalPlaces(chart.options.scales.x.max ?? Math.max(...xValues), xDecimals);
+
+            // Y1-Achse
+            const y1MinInput = document.getElementById('y1Min');
+            const y1MaxInput = document.getElementById('y1Max');
+            const y1Values = chart.data.datasets
+                .filter((dataset) => dataset.yAxisID === 'y1' && !dataset.hidden)
+                .flatMap((dataset) => dataset.data)
+                .filter((value) => value !== null && value !== undefined && !isNaN(value));
+            const y1Decimals = getMaxDecimals(y1Values);
+
+            y1MinInput.value = roundToDecimalPlaces(Math.min(...y1Values) || 0, y1Decimals);
+            y1MaxInput.value = roundToDecimalPlaces(Math.max(...y1Values) || 1, y1Decimals);
+
+            // Y2-Achse
+            const y2MinInput = document.getElementById('y2Min');
+            const y2MaxInput = document.getElementById('y2Max');
+            const y2Values = chart.data.datasets
+                .filter((dataset) => dataset.yAxisID === 'y2' && !dataset.hidden)
+                .flatMap((dataset) => dataset.data)
+                .filter((value) => value !== null && value !== undefined && !isNaN(value));
+            const y2Decimals = getMaxDecimals(y2Values);
+
+            y2MinInput.value = roundToDecimalPlaces(Math.min(...y2Values) || 0, y2Decimals);
+            y2MaxInput.value = roundToDecimalPlaces(Math.max(...y2Values) || 1, y2Decimals);
+        }
+
+        function handleNewDataUpload(fileName, data) {
+            // Neue Daten hinzufügen
+            addFileToTable(fileName, data);
+
+            // Labels und Achseneinstellungen aktualisieren
+            updateXAxisLabels(); // X-Achse mit neuen Zeitdaten aktualisieren
+            updateChartForVisibleRows(); // Daten für die Y-Achse aktualisieren
+            updateAxes(); // Achsenbeschriftungen und Sichtbarkeit aktualisieren
+
+            // Input-Felder mit den aktuellen Achsenwerten befüllen
+            if (fileTableBody.rows.length === 1) { // Nur wenn Tabelle vorher leer war
+                prefillAxisInputs();
+            }
+            updateXAxisTicks(); // Schrittweiten aktualisieren
+        }
+
+        function updateXAxisTicks() {
+            const xScale = chart.options.scales.x;
+            const xMin = xScale.min ?? Math.min(...chart.data.labels);
+            const xMax = xScale.max ?? Math.max(...chart.data.labels);
+            const range = xMax - xMin;
+
+            let step;
+
+            // Schrittweiten basierend auf dem Bereich
+            if (range <= 10) {
+                step = 1; // 1 Sekunde
+            } else if (range <= 20) {
+                step = 2; // 2 Sekunden
+            } else if (range <= 50) {
+                step = 5; // 5 Sekunden
+            } else if (range <= 100) {
+                step = 10; // 10 Sekunden
+            } else if (range <= 300) {
+                step = 20; // 20 Sekunden
+            } else if (range <= 600) {
+                step = 30; // 30 Sekunden
+            } else if (range <= 1200) {
+                step = 60; // 1 Minute
+            } else if (range <= 3000) {
+                step = 120; // 2 Minuten
+            } else if (range <= 6000) {
+                step = 300; // 5 Minuten
+            } else if (range <= 12000) {
+                step = 600; // 10 Minuten
+            } else if (range <= 18000) {
+                step = 1200; // 20 Minuten
+            } else if (range <= 36000) {
+                step = 1800; // 30 Minuten
+            } else {
+                step = 3600; // 60 Minuten
+            }
+
+            // Starte bei der nächsten vielfachen Schrittweite
+            const adjustedMin = Math.ceil(xMin / step) * step;
+            const adjustedMax = Math.floor(xMax / step) * step;
+
+            // Erstelle die Ticks
+            const ticks = [];
+            for (let i = adjustedMin; i <= adjustedMax; i += step) {
+                ticks.push(i);
+            }
+
+            // Setze benutzerdefinierte Ticks und Schrittweite
+            xScale.ticks = {
+                callback: function (value) {
+                    return value.toFixed(0); // Sekunden bleiben als Anzeige
+                },
+                stepSize: step, // Dynamische Schrittweite
+                min: adjustedMin, // Angepasster Minimalwert
+                max: adjustedMax, // Angepasster Maximalwert
+            };
+
+            chart.update(); // Diagramm aktualisieren
+        }
+
+        function updateAxes() {
+            const hasData = chart.data.datasets.some(dataset => !dataset.hidden);
+            const y2Active = columnSelectY2.value !== 'off'; // Prüfen, ob Y2 aktiv ist
+
+            // X-Achse
+            chart.options.scales.x.ticks.display = hasData;
+            chart.options.scales.x.grid.display = hasData;
+            chart.options.scales.x.title.text = hasData ? "Zeit [s]" : "X";
+
+            // Y1-Achse
+            chart.options.scales.y1.ticks.display = hasData;
+            chart.options.scales.y1.grid.display = hasData;
+            chart.options.scales.y1.title.text = hasData
+                ? columnSelectY1.options[columnSelectY1.selectedIndex]?.text || "Y1"
+                : "Y1";
+
+            // Y2-Achse
+            chart.options.scales.y2.display = hasData && y2Active; // Achse ein-/ausblenden
+            chart.options.scales.y2.ticks.display = hasData && y2Active;
+            chart.options.scales.y2.grid.drawOnChartArea = false; // Keine Gridlines
+            chart.options.scales.y2.title.display = y2Active; // Label nur anzeigen, wenn Y2 aktiv ist
+            chart.options.scales.y2.title.text = y2Active
+                ? columnSelectY2.options[columnSelectY2.selectedIndex]?.text || "Y2"
+                : "Y2";
+
+            chart.update(); // Diagramm aktualisieren
+        }
+        
+        function updateXAxisLabels() {
+            const timeSeries = globalData.length > 0
+                ? globalData[0].rows.map(row => row[0]) // Zeitspalte
+                : [];
+
+            chart.data.labels = timeSeries; // X-Achsen-Daten setzen
+            chart.update();
+        }
+
+        function resetToInitialState() {
+            // X-Achse zurücksetzen
+            chart.options.scales.x.title.text = "X";
+            chart.options.scales.x.ticks.display = false;
+            chart.options.scales.x.grid.display = false;
+            delete chart.options.scales.x.min;
+            delete chart.options.scales.x.max;
+
+            // Y1-Achse zurücksetzen
+            chart.options.scales.y1.title.text = "Y1";
+            chart.options.scales.y1.ticks.display = false;
+            chart.options.scales.y1.grid.display = false;
+            delete chart.options.scales.y1.min;
+            delete chart.options.scales.y1.max;
+
+            // Y2-Achse zurücksetzen
+            chart.options.scales.y2.title.text = "Y2";
+            chart.options.scales.y2.ticks.display = false;
+            chart.options.scales.y2.title.display = false;
+            chart.options.scales.y2.display = false; // Y2 vollständig ausblenden
+            delete chart.options.scales.y2.min;
+            delete chart.options.scales.y2.max;
+
+            // Y2-Datasets vollständig ausblenden
+            chart.data.datasets.forEach((dataset) => {
+                if (dataset.yAxisID === 'y2') {
+                    dataset.hidden = true;
+                }
+            });
+
+            // Daten und globale Variablen zurücksetzen
+            chart.data.datasets = [];
+            globalHeaders = [];
+            globalData = [];
+            uploadedFilesInfo.clear();
+
+            // Tabelle leeren
+            fileTableBody.innerHTML = '';
+
+            // Dropdowns zurücksetzen
+            populateDropdowns([]);
+
+            // Diagramm aktualisieren
+            chart.update();
+
+            // Fortschrittsanzeige aktualisieren
+            updateProgressStatus();
+
+            // Eingabefelder zurücksetzen
+            prefillAxisInputs(); // Mit Standardwerten füllen
+        }
+
+        function addFileToTable(fileName, data) {
+            const lineColor = getNextColor(); // Generiere eine zufällige Farbe für den Datensatz
+            const rowIndex  = globalData.length; // Index entspricht der Länge von globalData
+
+            globalData.push(data); // Speichere die Daten global
+
+            // Füge Datei zu `uploadedFilesInfo` hinzu
+            const fileIdentifier = `${fileName}-${data.rows.length}`;
+            uploadedFilesInfo.add(fileIdentifier);
+            console.log(`Datei hinzugefügt: ${fileIdentifier}`);
+            
+            // Zeile in der Tabelle hinzufügen
+            const row = document.createElement('tr');
+            row.dataset.datasetIndex = rowIndex;
+            row.innerHTML = `
+                <td style="color: ${lineColor};">${fileName}</td>
+                <td><input type="checkbox" checked></td>
+                <td><button onclick="removeRow(this, ${rowIndex})">Löschen</button></td>
+            `;
+            fileTableBody.appendChild(row);
+
+            // Datensätze für Y1 und Y2 ins Diagramm hinzufügen
+            addDatasetToChart(fileName, data, rowIndex, lineColor);
+
+            // Fortschrittsstatus aktualisieren
+            updateProgressStatus();
+
+            // Achsenbeschriftungen und Sichtbarkeit aktualisieren
+            updateAxes();
+        }
+
+        fileTableBody.addEventListener('change', (e) => {
+            if (e.target.type === 'checkbox') {
+                const row = e.target.closest('tr');
+                const rowIndex = Array.from(fileTableBody.rows).indexOf(row);
+
+                // Sichtbarkeit des Datensatzes im Diagramm aktualisieren
+                toggleDataset(e.target.checked, rowIndex);
+
+                // Aktualisiere Y-Achsen-Skalen
+                updateYAxisScale('y1');
+                updateYAxisScale('y2');
+
+                // Aktualisiere Achsentitel und Sichtbarkeit
+                updateAxes();
+
+                // Fortschrittsanzeige aktualisieren
+                updateProgressStatus(); // Nur einmal am Ende aufrufen
+            }
+        });
+
+        // Event-Listener für Mouseenter
+        fileTableBody.addEventListener('mouseover', (e) => {
+            const row = e.target.closest('tr');
+            if (!row) return;
+
+            const rowIndex = Array.from(fileTableBody.rows).indexOf(row);
+            const y1Index = rowIndex * 2; // Y1-Linienindex
+            const y2Index = y1Index + 1; // Y2-Linienindex
+
+            // Y1 hervorheben
+            const datasetY1 = chart.data.datasets[y1Index];
+            if (datasetY1) {
+                datasetY1.borderWidth = 7; // Linienbreite erhöhen
+            }
+
+            // Y2 hervorheben
+            const datasetY2 = chart.data.datasets[y2Index];
+            if (datasetY2) {
+                datasetY2.borderWidth = 7; // Linienbreite erhöhen
+            }
+
+            // Highlighten der Tabellenzelle
+            const firstCell = row.cells[0];
+            if (firstCell) {
+                const color = datasetY1?.borderColor || ''; // Y1-Farbe als Referenz
+                const brightness = calculateBrightness(color);
+                const textColor = brightness > 128 ? 'black' : 'white';
+
+                // Originalfarben speichern
+                firstCell.dataset.originalBackgroundColor = firstCell.style.backgroundColor;
+                firstCell.dataset.originalColor = firstCell.style.color;
+
+                // Highlight setzen
+                firstCell.style.backgroundColor = color;
+                firstCell.style.color = textColor;
+            }
+
+            chart.update(); // Diagramm aktualisieren
+        });
+
+        // Event-Listener für Mouseleave
+        fileTableBody.addEventListener('mouseout', (e) => {
+            const row = e.target.closest('tr');
+            if (!row) return;
+
+            const rowIndex = Array.from(fileTableBody.rows).indexOf(row);
+            const y1Index = rowIndex * 2; // Y1-Linienindex
+            const y2Index = y1Index + 1; // Y2-Linienindex
+
+            // Y1-Linienbreite zurücksetzen
+            const datasetY1 = chart.data.datasets[y1Index];
+            if (datasetY1) {
+                datasetY1.borderWidth = 2; // Standardbreite
+            }
+
+            // Y2-Linienbreite zurücksetzen
+            const datasetY2 = chart.data.datasets[y2Index];
+            if (datasetY2) {
+                datasetY2.borderWidth = 2; // Standardbreite
+            }
+
+            // Tabellenhighlight zurücksetzen
+            const firstCell = row.cells[0];
+            if (firstCell) {
+                // Originalfarben wiederherstellen
+                firstCell.style.backgroundColor = firstCell.dataset.originalBackgroundColor || '';
+                firstCell.style.color = firstCell.dataset.originalColor || '';
+            }
+
+            chart.update(); // Diagramm aktualisieren
+        });
+
+        function getColumnIndexForY1() {
+            return parseInt(columnSelectY1.value, 10) + 1; // +1, um die Zeitspalte zu überspringen
+        }
+
+        function getColumnIndex(dropdown) {
+            const value = dropdown.value;
+            if (value === 'off') return -1; // "Aus" wird durch -1 repräsentiert
+            return parseInt(value, 10) + 1; // +1, um die Zeitspalte zu überspringen
+        }
+
+        function addDatasetToChart(fileName, data, rowIndex, lineColor) {
+            const timeSeries = data.rows.map(row => row[0]); // Zeitspalte
+            const y1Index = getColumnIndex(columnSelectY1); // Index für Y1
+            const y2Index = getColumnIndex(columnSelectY2); // Index für Y2
+
+            const y1Values = data.rows.map(row => y1Index > 0 ? row[y1Index] : null); // Y1-Daten
+            const y2Values = y2Index > 0 ? data.rows.map(row => row[y2Index] || null) : []; // Y2-Daten
+
+            if (!chart.data.labels.length) {
+                chart.data.labels = timeSeries; // Labels setzen, falls noch nicht vorhanden
+            }
+
+            // Y1-Datensatz hinzufügen
+            chart.data.datasets.push({
+                label: `${fileName} (Y1)`,
+                data: y1Values,
+                borderColor: lineColor,
+                borderWidth: 2,
+                pointRadius: 0,
+                fill: false,
+                yAxisID: 'y1',
+                borderDash: [], // Solide Linie
+                hidden: false,
+            });
+
+            // Y2-Datensatz hinzufügen
+            chart.data.datasets.push({
+                label: `${fileName} (Y2)`,
+                data: y2Values,
+                borderColor: lineColor,
+                borderWidth: 2,
+                pointRadius: 0,
+                fill: false,
+                yAxisID: 'y2',
+                borderDash: [2, 5], // Gepunktete Linie
+                hidden: y2Index <= 0, // Y2 ist ausgeblendet, wenn "Aus" gewählt wurde
+            });
+
+            updateYAxisScale('y1');
+            updateYAxisScale('y2');
+            chart.update();
+        }
+
+        function toggleDataset(isVisible, rowIndex) {
+            const y1Index = rowIndex * 2; // Y1-Index
+            const y2Index = y1Index + 1; // Y2-Index
+
+            if (chart.data.datasets[y1Index]) {
+                chart.data.datasets[y1Index].hidden = !isVisible; // Sichtbarkeit für Y1
+            }
+            if (chart.data.datasets[y2Index]) {
+                chart.data.datasets[y2Index].hidden = !isVisible || columnSelectY2.value === 'off'; // Sichtbarkeit für Y2
+            }
+
+            updateYAxisScale('y1');
+            updateYAxisScale('y2');
+            chart.update();
+        }
+
+        function toggleYAxisY2(shouldShow) {
+            chart.options.scales.y2.display = shouldShow;
+
+            chart.data.datasets.forEach((dataset) => {
+                if (dataset.yAxisID === 'y2') {
+                    dataset.hidden = !shouldShow;
+                }
+            });
+
+            if (!shouldShow) {
+                chart.options.scales.y2.ticks.display = false;
+                chart.options.scales.y2.title.display = false;
+            } else {
+                chart.options.scales.y2.ticks.display = true;
+                chart.options.scales.y2.title.display = true;
+            }
+
+            chart.update();
+        }
+
+        function removeRow(button, rowIndex) {
+            const row = button.closest('tr');
+            const y1Index = rowIndex * 2;
+            const y2Index = y1Index + 1;
+
+            // Entferne Y2, falls vorhanden
+            if (chart.data.datasets[y2Index]) {
+                chart.data.datasets.splice(y2Index, 1);
+            }
+
+            // Entferne Y1, falls vorhanden
+            if (chart.data.datasets[y1Index]) {
+                chart.data.datasets.splice(y1Index, 1);
+            }
+
+            // Entferne aus globalData
+            globalData.splice(rowIndex, 1);
+
+            // Entferne Zeile aus Tabelle
+            row.remove();
+
+            // Aktualisiere Tabellenindizes
+            updateTableIndices();
+
+            // Fortschrittsstatus aktualisieren
+            updateProgressStatus();
+
+            // Prüfen, ob keine Zeilen mehr vorhanden sind
+            if (fileTableBody.rows.length === 0) {
+                resetToInitialState(); // Diagramm und Achsen zurücksetzen
+            } else {
+                updateAxes(); // Achsenbeschriftungen und Sichtbarkeit aktualisieren
+            }
+        }
+
+        function updateTableIndices() {
+            console.log("Aktualisiere Tabellenindizes...");
+            Array.from(fileTableBody.rows).forEach((row, index) => {
+                console.log(`Zeilenindex ${index} wird aktualisiert.`);
+
+                row.dataset.datasetIndex = index;
+
+                const checkbox = row.querySelector('input[type="checkbox"]');
+                const deleteButton = row.querySelector('button');
+
+                // Checkbox und Löschen-Button aktualisieren
+                checkbox.setAttribute('onchange', `toggleDataset(this.checked, ${index})`);
+                deleteButton.setAttribute('onclick', `removeRow(this, ${index})`);
+            });
+            console.log("Tabellenindizes aktualisiert.");
+        }
+
+        function updateChartForVisibleRows() {
+            const rows = Array.from(fileTableBody.rows);
+            const y2Active = columnSelectY2.value !== 'off'; // Prüfen, ob Y2 aktiv ist
+
+            rows.forEach((row, rowIndex) => {
+                const checkbox = row.querySelector('input[type="checkbox"]');
+                const isVisible = checkbox.checked;
+
+                const y1Index = rowIndex * 2; // Y1-Index
+                const y2Index = y1Index + 1; // Y2-Index
+
+                // Aktualisiere Y1-Daten
+                if (chart.data.datasets[y1Index]) {
+                    const y1SelectedIndex = parseInt(columnSelectY1.value, 10) + 1; // Richtiger Index aus Dropdown
+                    chart.data.datasets[y1Index].data = globalData[rowIndex].rows.map(row =>
+                        row[y1SelectedIndex] || null
+                    );
+                    chart.data.datasets[y1Index].hidden = !isVisible;
+                }
+
+                // Aktualisiere Y2-Daten
+                if (chart.data.datasets[y2Index]) {
+                    if (!y2Active) {
+                        chart.data.datasets[y2Index].hidden = true; // Ausblenden, wenn "Aus" gewählt wurde
+                    } else {
+                        const y2SelectedIndex = parseInt(columnSelectY2.value, 10) + 1; // Richtiger Index aus Dropdown
+                        chart.data.datasets[y2Index].data = globalData[rowIndex].rows.map(row =>
+                            row[y2SelectedIndex] || null
+                        );
+                        chart.data.datasets[y2Index].hidden = !isVisible;
+                    }
+                }
+            });
+
+            // Aktualisiere Achsentitel
+            updateAxes();
+        }
+
+        function updateXAxisLabels() {
+            const timeSeries = globalData.length > 0
+                ? globalData[0].rows.map(row => row[0]) // Zeitspalte
+                : [];
+
+            chart.data.labels = timeSeries;
+            chart.update(); // Diagramm aktualisieren
+        }
+
+        function updateXAxisRange() {
+            const xMinInput = document.getElementById('xMin');
+            const xMaxInput = document.getElementById('xMax');
+
+            const xMin = parseFloat(xMinInput.value);
+            const xMax = parseFloat(xMaxInput.value);
+
+            // Überprüfen, ob die Eingaben gültige numerische Werte sind
+            if (isNaN(xMin) || isNaN(xMax) || xMin >= xMax) {
+                alert('Bitte gültige Werte für die X-Achse eingeben.');
+                return;
+            }
+
+            // Setze den Bereich der X-Achse basierend auf den Zeitwerten
+            chart.options.scales.x.min = xMin;
+            chart.options.scales.x.max = xMax;
+
+            // Aktualisiere Y-Achsen-Skalen
+            resetYAxisRange('y1');
+            resetYAxisRange('y2');
+
+            updateXAxisTicks(); // Schrittweiten aktualisieren
+            chart.update(); // Diagramm aktualisieren
+        }
+
+        function resetXAxisRange() {
+            // Entferne manuelle Einschränkungen der X-Achse
+            delete chart.options.scales.x.min;
+            delete chart.options.scales.x.max;
+
+            // Aktualisiere Y-Achsen-Skalen
+            resetYAxisRange('y1');
+            resetYAxisRange('y2');
+
+            updateXAxisTicks(); // Schrittweiten aktualisieren
+            chart.update(); // Diagramm aktualisieren
+        }
+
+        function updateYAxisScale(axisID) {
+            const visibleData = chart.data.datasets
+                .filter(dataset => dataset.yAxisID === axisID && !dataset.hidden)
+                .flatMap(dataset => dataset.data)
+                .filter(value => value !== null && value !== undefined && !isNaN(value));
+
+            const scaleOptions = axisID === 'y1' ? chart.options.scales.y1 : chart.options.scales.y2;
+
+            if (visibleData.length === 0) {
+                // Standardwerte setzen
+                scaleOptions.min = 0;
+                scaleOptions.max = 1;
+            } else {
+                const min = Math.min(...visibleData);
+                const max = Math.max(...visibleData);
+
+                if (min === max) {
+                    scaleOptions.min = min - 1;
+                    scaleOptions.max = max + 1;
+                } else {
+                    const range = max - min;
+                    const padding = range * 0.1;
+                    scaleOptions.min = min - padding;
+                    scaleOptions.max = max + padding;
+                }
+            }
+
+            chart.update();
+        }
+
+        function updateYAxisRange(axisID) {
+            const minInput = document.getElementById(`${axisID}Min`);
+            const maxInput = document.getElementById(`${axisID}Max`);
+
+            const min = parseFloat(minInput.value);
+            const max = parseFloat(maxInput.value);
+
+            if (isNaN(min) || isNaN(max) || min >= max) {
+                alert(`Bitte gültige Werte für die ${axisID.toUpperCase()}-Achse eingeben.`);
+                return;
+            }
+
+            chart.options.scales[axisID].min = min;
+            chart.options.scales[axisID].max = max;
+            chart.update();
+        }
+
+        function resetYAxisRange(axisID) {
+            delete chart.options.scales[axisID].min;
+            delete chart.options.scales[axisID].max;
+            prefillAxisInputs(); // Eingabefelder aktualisieren
+            chart.update();
+        }
+
+        function toggleAllDatasets(show) {
+            chart.data.datasets.forEach(dataset => dataset.hidden = !show);
+            document.querySelectorAll('#fileTableBody input[type="checkbox"]').forEach(cb => cb.checked = show);
+
+            updateAxes();
+            updateProgressStatus();
+            chart.update();
+        }
+
+        function showAllDatasets() {
+            toggleAllDatasets(true); // Alle anzeigen
+        }
+
+        function hideAllDatasets() {
+            toggleAllDatasets(false); // Alle ausblenden
+        }
+
+        function deleteAllDatasets() {
+            resetToInitialState(); // Setze Diagramm und Achsen auf Initialzustand
+        }
+
+        function exportChartAsImage() {
+            const canvas = document.getElementById('myChart');
+            if (!canvas) {
+                console.error("Kein Diagramm gefunden.");
+                return;
+            }
+
+            const imageData = canvas.toDataURL('image/png'); // Canvas-Inhalt als Bild
+
+            // Erstelle ein unsichtbares Link-Element
+            const link = document.createElement('a');
+            link.href = imageData;
+            link.download = 'diagramm.png'; // Standard-Name für den Download
+            link.click();
+        }
+
+        // Funktion zum Setzen eines Cookies
+        function setCookie(name, value, days) {
+            const date = new Date();
+            date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+            const expires = "expires=" + date.toUTCString();
+            document.cookie = name + "=" + value + ";" + expires + ";path=/";
+        }
+
+        // Funktion zum Lesen eines Cookies
+        function getCookie(name) {
+            const nameEQ = name + "=";
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                let cookie = cookies[i];
+                while (cookie.charAt(0) === ' ') {
+                    cookie = cookie.substring(1);
+                }
+                if (cookie.indexOf(nameEQ) === 0) {
+                    return cookie.substring(nameEQ.length, cookie.length);
+                }
+            }
+            return null;
+        }
+
+        // Funktion zum Verstecken des Overlays und Setzen des Cookies
+        function hideOverlay() {
+            const overlay = document.getElementById('overlay');
+            overlay.style.display = 'none';
+            setCookie('overlayHidden', 'true', 1); // Speichert die Entscheidung für einen Tag
+        }
+
+        // Funktion zur Initialisierung
+        function checkOverlay() {
+            const overlay = document.getElementById('overlay');
+            if (getCookie('overlayHidden') === 'true') {
+                overlay.style.display = 'none'; // Overlay ausblenden, wenn der Cookie existiert
+            }
+        }
+
+        function getDistinctColor(index) {
+            const hueStep = 137.5; // Goldener Winkel für gleichmäßige Verteilung
+            const hue = (index * hueStep) % 360; // Hue im HSL-Farbraum (0-360)
+            const saturation = 70; // Sättigung (70% für kräftige Farben)
+            const lightness = 50; // Helligkeit (50% für mittlere Kontraste)
+
+            return `hsl(${hue}, ${saturation}%, ${lightness}%)`; // HSL-Farbe als String zurückgeben
+        }
+
+        function getNextColor() {
+            const usedColorCount = usedColors.size; // Anzahl bereits genutzter Farben
+            let color;
+
+            do {
+                color = getDistinctColor(usedColorCount); // Generiere nächste Farbe
+            } while (usedColors.has(color)); // Stelle sicher, dass die Farbe noch nicht verwendet wurde
+
+            usedColors.add(color); // Farbe als genutzt markieren
+            return color;
+        }
+        
+        // Funktion zur Berechnung der Helligkeit basierend auf RGB-Werten
+        function calculateBrightness(color) {
+            const [r, g, b] = color.match(/\d+/g).map(Number);
+            return (r * 299 + g * 587 + b * 114) / 1000; // Standardformel zur Helligkeitsberechnung
+        }
+    </script>
+</body>
+</html>
